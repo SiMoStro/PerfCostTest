@@ -44,7 +44,7 @@ namespace PerfTest
         }
 
         double _perfCountersCpu, _apiCpu;
-        long _perfCountersCost, _apiCost;
+        double _perfCountersCost, _apiCost;
         long _iteration;
 
         private void HandleTimerTick(object sender, EventArgs e)
@@ -60,22 +60,46 @@ namespace PerfTest
             _lblCostApi.Text = GetCost(_apiCost, _iteration);
             _lblCpuPerf.Text = _perfCountersCpu.ToString("#.00") + "%";
             _lblCostPerf.Text = GetCost(_perfCountersCost , _iteration);
+
+            PostProcessing();
         }
 
-        private string GetCost(long nanosecs, long iter)
+        private void PostProcessing()
         {
-            double micro = nanosecs / 100000.0d;
-            return (micro / iter).ToString("#.00");
+            int procCount = Environment.ProcessorCount;
+            Win32.PROCESSOR_POWER_INFORMATION[] procInfo = new Win32.PROCESSOR_POWER_INFORMATION[procCount];
+            uint retval = Win32.CallNtPowerInformation(Win32.ProcessorInformation, IntPtr.Zero, 0, procInfo, procInfo.Length * Marshal.SizeOf(typeof(Win32.PROCESSOR_POWER_INFORMATION)));
+
+            string tmp = "";
+            if (retval == Win32.STATUS_SUCCESS)
+            {
+                foreach (var item in procInfo)
+                {
+                    tmp += item.CurrentMhz + "; ";
+                }
+            }
+            _lblInfo.Text = tmp;
         }
 
-        private double Calculate(ref long cost, Func<double> oper)
+        private string GetCost(double microsecs, long iter)
+        {
+            return (microsecs / iter).ToString("#.00");
+        }
+
+        private void HandleButtonResetCountersClick(object sender, EventArgs e)
+        {
+            _iteration = 0;
+            _apiCost = _perfCountersCost = 0;
+        }
+
+        private double Calculate(ref double cost, Func<double> oper)
         {
             var freq = Stopwatch.Frequency;
             _stopWatch = Stopwatch.StartNew();
             double d = oper();
             _stopWatch.Stop();
             long nanosecPerTick = _ns / freq;
-            cost += _stopWatch.ElapsedTicks * nanosecPerTick;
+            cost += _stopWatch.Elapsed.TotalMilliseconds;
             return d;
         }
 
